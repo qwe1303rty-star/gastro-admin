@@ -1,14 +1,39 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import GAS_URL, { STATUSES } from '../config'
 import OrderCard from '../components/OrderCard'
+import NotificationBanner from '../components/NotificationBanner'
 
 const filters = ['Все', ...STATUSES]
+
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1)
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2)
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.5)
+  } catch {}
+}
+
+function vibrate() {
+  try { navigator.vibrate?.([200, 100, 200]) } catch {}
+}
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState('Все')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const prevOrderIds = useRef(new Set())
+  const isFirstLoad = useRef(true)
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -18,7 +43,22 @@ export default function OrdersPage() {
       const res = await fetch(url)
       const data = await res.json()
       if (data.status === 'ok') {
-        setOrders(data.orders || [])
+        const newOrders = data.orders || []
+
+        if (!isFirstLoad.current) {
+          const newIds = new Set(newOrders.map(o => o.OrderID))
+          for (const id of newIds) {
+            if (!prevOrderIds.current.has(id)) {
+              playNotifSound()
+              vibrate()
+              break
+            }
+          }
+        }
+
+        prevOrderIds.current = new Set(newOrders.map(o => o.OrderID))
+        isFirstLoad.current = false
+        setOrders(newOrders)
         setError('')
       } else {
         setError(data.message || 'Ошибка загрузки')
@@ -31,6 +71,7 @@ export default function OrdersPage() {
   }, [filter])
 
   useEffect(() => {
+    isFirstLoad.current = true
     setLoading(true)
     fetchOrders()
     const interval = setInterval(fetchOrders, 30000)
@@ -39,6 +80,8 @@ export default function OrdersPage() {
 
   return (
     <div className="px-4 pt-4">
+      <NotificationBanner />
+
       <div className="flex gap-2 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-none">
         {filters.map((f) => (
           <button

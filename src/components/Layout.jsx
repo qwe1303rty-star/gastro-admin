@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { isPushReady, isSubscribed, subscribeToPush, unsubscribeFromPush } from '../utils/push'
 
 const tabs = [
   {
@@ -31,6 +33,26 @@ export default function Layout({ children }) {
   const { logout } = useAuth()
   const location = useLocation()
   const isDetail = location.pathname.startsWith('/order/')
+  const [pushEnabled, setPushEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!isPushReady()) return
+    isSubscribed().then(setPushEnabled)
+  }, [])
+
+  const togglePush = async () => {
+    try {
+      if (pushEnabled) {
+        await unsubscribeFromPush()
+        setPushEnabled(false)
+      } else {
+        await subscribeToPush()
+        setPushEnabled(true)
+      }
+    } catch (err) {
+      alert(err.message)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-dark flex flex-col">
@@ -43,12 +65,31 @@ export default function Layout({ children }) {
             {isDetail ? 'Заказ' : 'ГС Заказы'}
           </span>
         </div>
-        <button
-          onClick={logout}
-          className="text-[12px] text-muted hover:text-text transition-colors"
-        >
-          Выйти
-        </button>
+        <div className="flex items-center gap-4">
+          {isPushReady() && (
+            <button
+              onClick={togglePush}
+              className="relative p-1.5 transition-colors"
+              title={pushEnabled ? 'Уведомления включены' : 'Уведомления выключены'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                className={pushEnabled ? 'text-gold' : 'text-muted'}
+              >
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 01-3.46 0" />
+              </svg>
+              {pushEnabled && (
+                <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-success" />
+              )}
+            </button>
+          )}
+          <button
+            onClick={logout}
+            className="text-[12px] text-muted hover:text-text transition-colors"
+          >
+            Выйти
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 pb-20 overflow-y-auto">

@@ -1,0 +1,12 @@
+name = "gs-push-server"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+VAPID_PUBLIC_KEY = "BIID9UzSXpFwJ4OlJOacVcNg3c66sHARBysgsHUtkvh-xNKRDj-QokZ5_Z9TafWBnsZB99hLQfTVGfPckySfj4Q"
+VAPID_PRIVATE_KEY = "E8IutWKtMMQcJPMVHwQzHLRk5RE05TSmsmjS1VGMoGI"
+VAPID_SUBJECT = "mailto:admin@gastro-spektakl.ru"
+
+[[kv_namespaces]]
+binding = "SUBSCRIPTIONS"
+id = ""

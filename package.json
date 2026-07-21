@@ -11,7 +11,9 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
@@ -20,6 +22,7 @@
     "tailwindcss": "^3.4.14",
     "vite": "^5.4.10",
     "vite-plugin-pwa": "^0.21.1",
+    "web-push": "^3.6.7",
     "workbox-window": "^7.3.0"
   }
 }
