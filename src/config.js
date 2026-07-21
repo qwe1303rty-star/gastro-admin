@@ -1,4 +1,4 @@
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxvydPu4oAR5yjaHih5xluIfMzPqQFcEU12Kq29tlZm0Vy5cLWPgg5uM2W0tWE3-cPLIQ/exec'
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxKHHIJTI73YtsuH_5eDdrGzpDtvzUdeLQVX5MhhNsJRaW1kZLVcPOWxMHnjrFNk_x72g/exec'
 
 export const PIN_CODE = '1234'
 
