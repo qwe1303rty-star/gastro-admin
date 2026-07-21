@@ -13,11 +13,16 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  fetch('https://gs-push-server.qwe1303rty.workers.dev/push-received', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: data.title, body: data.body, time: Date.now() }),
+  }).catch(() => {})
+
   const options = {
     body: data.body,
     icon: '/gastro-admin/icons/icon-192.png',
     badge: '/gastro-admin/icons/icon-192.png',
-    vibrate: [200, 100, 200],
     tag: data.tag || 'gs-notification',
     renotify: true,
     data: { url: data.url || '/gastro-admin/' },
@@ -52,7 +57,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
     self.registration.pushManager
       .subscribe(event.oldSubscription.options)
       .then((subscription) => {
-        return fetch('/gastro-admin/api/push/subscribe', {
+        return fetch('https://gs-push-server.qwe1303rty.workers.dev/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(subscription),

@@ -288,6 +288,7 @@ export default {
                 'Content-Encoding': 'aes128gcm',
                 'Content-Type': 'application/octet-stream',
                 Authorization: `vapid t=${jws}, k=${VAPID_PUBLIC_KEY}`,
+                TTL: '86400',
               },
               body: encrypted,
             })
@@ -299,6 +300,30 @@ export default {
         }
 
         return json({ count: keys.keys.length, results })
+      }
+
+      if (path === '/push-received' && request.method === 'POST') {
+        const body = await request.json()
+        return json({ received: true, ...body })
+      }
+
+      if (path === '/clean-stale' && request.method === 'POST') {
+        const keys = await env.SUBSCRIPTIONS.list()
+        let deleted = 0
+        for (const key of keys.keys) {
+          try {
+            const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
+            const status = await sendPush(sub, { title: 'ping', body: 'ping' })
+            if (status === 404 || status === 410) {
+              await env.SUBSCRIPTIONS.delete(key.name)
+              deleted++
+            }
+          } catch {
+            await env.SUBSCRIPTIONS.delete(key.name).catch(() => {})
+            deleted++
+          }
+        }
+        return json({ total: keys.keys.length, deleted })
       }
 
       if (path === '/vapidPublicKey' && request.method === 'GET') {
