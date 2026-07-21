@@ -4,7 +4,7 @@ export const PIN_CODE = '1234'
 
 export const VAPID_PUBLIC_KEY = 'BIID9UzSXpFwJ4OlJOacVcNg3c66sHARBysgsHUtkvh-xNKRDj-QokZ5_Z9TafWBnsZB99hLQfTVGfPckySfj4Q'
 
-export const PUSH_SERVER_URL = 'https://gs-push-server.WORKER_NAME.workers.dev'
+export const PUSH_SERVER_URL = 'https://gs-push-server.qwe1303rty.workers.dev'
 
 export const STATUSES = ['Новый', 'Принят', 'Готовится', 'В доставке', 'Доставлен']
 

@@ -9,4 +9,4 @@ VAPID_SUBJECT = "mailto:admin@gastro-spektakl.ru"
 
 [[kv_namespaces]]
 binding = "SUBSCRIPTIONS"
-id = ""
+id = "aec9173010c843f9ae8171bfab7d1195"
