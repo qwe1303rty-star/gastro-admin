@@ -16,16 +16,12 @@ self.addEventListener('push', (event) => {
   fetch('https://gs-push-server.qwe1303rty.workers.dev/push-received', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: data.title, body: data.body, time: Date.now() }),
+    body: JSON.stringify({ title: data.title, body: data.body, ts: Date.now() }),
   }).catch(() => {})
 
   const options = {
     body: data.body,
-    icon: '/gastro-admin/icons/icon-192.png',
-    badge: '/gastro-admin/icons/icon-192.png',
     tag: data.tag || 'gs-notification',
-    renotify: true,
-    data: { url: data.url || '/gastro-admin/' },
   }
 
   event.waitUntil(self.registration.showNotification(data.title, options))
@@ -34,7 +30,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const url = event.notification.data?.url || '/gastro-admin/'
+  const url = '/gastro-admin/'
 
   event.waitUntil(
     clients
@@ -55,7 +51,7 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil(
     self.registration.pushManager
-      .subscribe(event.oldSubscription.options)
+      .subscribe(event.oldSubscription ? event.oldSubscription.options : { userVisibleOnly: true, applicationServerKey: self.__VAPID_PUBLIC_KEY })
       .then((subscription) => {
         return fetch('https://gs-push-server.qwe1303rty.workers.dev/subscribe', {
           method: 'POST',

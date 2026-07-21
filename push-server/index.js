@@ -185,7 +185,7 @@ async function sendPush(subscription, payload) {
     body: encrypted,
   })
 
-  return response.status
+  return { status: response.status, body: await response.text().catch(() => '') }
 }
 
 export default {
@@ -226,7 +226,7 @@ export default {
         const { title, body: msgBody, tag, url } = body
 
         const keys = await env.SUBSCRIPTIONS.list()
-        const results = { sent: 0, failed: 0 }
+        const results = { sent: 0, failed: 0, details: [] }
 
         const pushPayload = {
           title: title || 'ГС Заказы',
@@ -241,7 +241,7 @@ export default {
           const promises = batch.map(async (key) => {
             try {
               const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
-              const status = await sendPush(sub, pushPayload)
+              const { status, body: respBody } = await sendPush(sub, pushPayload)
               if (status >= 200 && status < 300) {
                 results.sent++
               } else if (status === 404 || status === 410) {
@@ -250,8 +250,10 @@ export default {
               } else {
                 results.failed++
               }
-            } catch {
+              results.details.push({ status, body: respBody })
+            } catch (err) {
               results.failed++
+              results.details.push({ error: err.message })
               try { await env.SUBSCRIPTIONS.delete(key.name) } catch {}
             }
           })
@@ -272,58 +274,30 @@ export default {
         return json({ count: subs.length, subs })
       }
 
-      if (path === '/send-debug' && request.method === 'POST') {
-        const body = await request.json()
-        const keys = await env.SUBSCRIPTIONS.list()
-        const results = []
-
-        for (const key of keys.keys) {
-          try {
-            const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
-            const jws = await generateVapidJws(new URL(sub.endpoint).origin)
-            const encrypted = await encryptPayload({ title: 'Test', body: 'Test' }, sub)
-            const response = await fetch(sub.endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Encoding': 'aes128gcm',
-                'Content-Type': 'application/octet-stream',
-                Authorization: `vapid t=${jws}, k=${VAPID_PUBLIC_KEY}`,
-                TTL: '86400',
-              },
-              body: encrypted,
-            })
-            const text = await response.text()
-            results.push({ endpoint: sub.endpoint?.substring(0, 60), status: response.status, body: text })
-          } catch (err) {
-            results.push({ error: err.message })
-          }
-        }
-
-        return json({ count: keys.keys.length, results })
-      }
-
       if (path === '/push-received' && request.method === 'POST') {
         const body = await request.json()
-        return json({ received: true, ...body })
+        const ts = new Date().toISOString()
+        await env.SUBSCRIPTIONS.put('debug-push-last', JSON.stringify({ ...body, ts }), {
+          expirationTtl: 86400,
+        })
+        return json({ received: true, ts })
       }
 
-      if (path === '/clean-stale' && request.method === 'POST') {
+      if (path === '/push-received-last' && request.method === 'GET') {
+        const val = await env.SUBSCRIPTIONS.get('debug-push-last')
+        return json(val ? JSON.parse(val) : { received: false })
+      }
+
+      if (path === '/clear-all' && request.method === 'POST') {
         const keys = await env.SUBSCRIPTIONS.list()
         let deleted = 0
         for (const key of keys.keys) {
-          try {
-            const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
-            const status = await sendPush(sub, { title: 'ping', body: 'ping' })
-            if (status === 404 || status === 410) {
-              await env.SUBSCRIPTIONS.delete(key.name)
-              deleted++
-            }
-          } catch {
-            await env.SUBSCRIPTIONS.delete(key.name).catch(() => {})
+          if (key.name !== 'debug-push-last') {
+            await env.SUBSCRIPTIONS.delete(key.name)
             deleted++
           }
         }
-        return json({ total: keys.keys.length, deleted })
+        return json({ deleted })
       }
 
       if (path === '/vapidPublicKey' && request.method === 'GET') {
