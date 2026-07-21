@@ -145,7 +145,7 @@ async function encryptPayload(payload, subscription) {
     ['encrypt']
   )
 
-  const plaintext = concat(new Uint8Array([0x02]), data)
+  const plaintext = concat(data, new Uint8Array([0x02]))
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: nonce, tagLength: 128 },
@@ -226,7 +226,7 @@ export default {
         const { title, body: msgBody, tag, url } = body
 
         const keys = await env.SUBSCRIPTIONS.list()
-        const results = { sent: 0, failed: 0, details: [] }
+        const results = { sent: 0, failed: 0 }
 
         const pushPayload = {
           title: title || 'ГС Заказы',
@@ -239,9 +239,14 @@ export default {
         for (let i = 0; i < keys.keys.length; i += batchSize) {
           const batch = keys.keys.slice(i, i + batchSize)
           const promises = batch.map(async (key) => {
+            if (key.name.startsWith('debug-')) return
             try {
               const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
-              const { status, body: respBody } = await sendPush(sub, pushPayload)
+              if (!sub || !sub.endpoint) {
+                await env.SUBSCRIPTIONS.delete(key.name)
+                return
+              }
+              const { status } = await sendPush(sub, pushPayload)
               if (status >= 200 && status < 300) {
                 results.sent++
               } else if (status === 404 || status === 410) {
@@ -250,10 +255,8 @@ export default {
               } else {
                 results.failed++
               }
-              results.details.push({ status, body: respBody })
             } catch (err) {
               results.failed++
-              results.details.push({ error: err.message })
               try { await env.SUBSCRIPTIONS.delete(key.name) } catch {}
             }
           })
@@ -261,43 +264,6 @@ export default {
         }
 
         return json(results)
-      }
-
-      if (path === '/debug' && request.method === 'GET') {
-        const keys = await env.SUBSCRIPTIONS.list()
-        const subs = []
-        for (const key of keys.keys) {
-          const val = await env.SUBSCRIPTIONS.get(key.name)
-          const parsed = JSON.parse(val)
-          subs.push({ endpoint: parsed.endpoint?.substring(0, 50) + '...', hasKeys: !!parsed.keys })
-        }
-        return json({ count: subs.length, subs })
-      }
-
-      if (path === '/push-received' && request.method === 'POST') {
-        const body = await request.json()
-        const ts = new Date().toISOString()
-        await env.SUBSCRIPTIONS.put('debug-push-last', JSON.stringify({ ...body, ts }), {
-          expirationTtl: 86400,
-        })
-        return json({ received: true, ts })
-      }
-
-      if (path === '/push-received-last' && request.method === 'GET') {
-        const val = await env.SUBSCRIPTIONS.get('debug-push-last')
-        return json(val ? JSON.parse(val) : { received: false })
-      }
-
-      if (path === '/clear-all' && request.method === 'POST') {
-        const keys = await env.SUBSCRIPTIONS.list()
-        let deleted = 0
-        for (const key of keys.keys) {
-          if (key.name !== 'debug-push-last') {
-            await env.SUBSCRIPTIONS.delete(key.name)
-            deleted++
-          }
-        }
-        return json({ deleted })
       }
 
       if (path === '/vapidPublicKey' && request.method === 'GET') {

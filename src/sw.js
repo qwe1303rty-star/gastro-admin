@@ -13,12 +13,6 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  fetch('https://gs-push-server.qwe1303rty.workers.dev/push-received', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: data.title, body: data.body, ts: Date.now() }),
-  }).catch(() => {})
-
   const options = {
     body: data.body,
     tag: data.tag || 'gs-notification',
