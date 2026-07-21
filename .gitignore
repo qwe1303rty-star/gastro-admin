@@ -3,3 +3,4 @@ dist
 .DS_Store
 *.local
 vapid-keys.json
+push-server/.wrangler

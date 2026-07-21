@@ -1,5 +1,7 @@
 const VAPID_PUBLIC_KEY = 'BIID9UzSXpFwJ4OlJOacVcNg3c66sHARBysgsHUtkvh-xNKRDj-QokZ5_Z9TafWBnsZB99hLQfTVGfPckySfj4Q'
-const VAPID_PRIVATE_KEY = 'E8IutWKtMMQcJPMVHwQzHLRk5RE05TSmsmjS1VGMoGI'
+
+const VAPID_PRIVATE_KEY_PKCS8_B64URL = 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgE8IutWKtMMQcJPMVHwQzHLRk5RE05TSmsmjS1VGMoGKhRANCAASCA_VM0l6RcCeDpSTmnFXDYN3OurBwEQcrILB1LZL4fsTSkQ4_kKJGef2fU2n1gZ7GQffYS0H01Rnz3JMkn4-E'
+
 const VAPID_SUBJECT = 'mailto:admin@gastro-spektakl.ru'
 
 const CORS_HEADERS = {
@@ -30,6 +32,29 @@ function uint8ArrayToBase64Url(arr) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+function concat(...arrays) {
+  let totalLength = 0
+  for (const arr of arrays) totalLength += arr.length
+  const result = new Uint8Array(totalLength)
+  let offset = 0
+  for (const arr of arrays) {
+    result.set(arr, offset)
+    offset += arr.length
+  }
+  return result
+}
+
+async function hmacSha256(key, data) {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    key,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, data))
+}
+
 async function generateVapidJws(audience) {
   const header = { typ: 'JWT', alg: 'ES256' }
   const now = Math.floor(Date.now() / 1000)
@@ -44,7 +69,7 @@ async function generateVapidJws(audience) {
   const payloadB64 = uint8ArrayToBase64Url(encoder.encode(JSON.stringify(payload)))
   const signingInput = `${headerB64}.${payloadB64}`
 
-  const keyData = base64UrlToUint8Array(VAPID_PRIVATE_KEY)
+  const keyData = base64UrlToUint8Array(VAPID_PRIVATE_KEY_PKCS8_B64URL)
   const cryptoKey = await crypto.subtle.importKey(
     'pkcs8',
     keyData,
@@ -67,96 +92,79 @@ async function encryptPayload(payload, subscription) {
   const encoder = new TextEncoder()
   const data = encoder.encode(JSON.stringify(payload))
 
-  const auth = base64UrlToUint8Array(subscription.keys.auth)
-  const p256dh = base64UrlToUint8Array(subscription.keys.p256dh)
+  const authSecret = base64UrlToUint8Array(subscription.keys.auth)
+  const uaPublicKey = base64UrlToUint8Array(subscription.keys.p256dh)
 
-  const ephemeralKey = await crypto.subtle.generateKey(
+  const asKeyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
-    true,
+    false,
     ['deriveBits']
   )
+  const asPublicKey = new Uint8Array(await crypto.subtle.exportKey('raw', asKeyPair.publicKey))
 
-  const serverPublicKey = await crypto.subtle.exportKey('raw', ephemeralKey.publicKey)
-
-  const recipientKey = await crypto.subtle.importKey(
+  const uaCryptoKey = await crypto.subtle.importKey(
     'raw',
-    p256dh,
+    uaPublicKey,
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
   )
 
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: recipientKey },
-    ephemeralKey.privateKey,
+  const ecdhSecret = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: uaCryptoKey },
+    asKeyPair.privateKey,
     256
   )
 
+  const prkKey = await hmacSha256(authSecret, new Uint8Array(ecdhSecret))
+
+  const keyInfo = concat(
+    encoder.encode('WebPush: info\x00'),
+    uaPublicKey,
+    asPublicKey
+  )
+  const ikmFull = await hmacSha256(prkKey, concat(keyInfo, new Uint8Array([0x01])))
+  const ikm = ikmFull.slice(0, 32)
+
   const salt = crypto.getRandomValues(new Uint8Array(16))
+  const prk = await hmacSha256(salt, ikm)
 
-  const authInfo = encoder.encode('WebPush: info\x00')
-  const clientInfo = new Uint8Array(authInfo.length + 2 + p256dh.length + 2)
-  clientInfo.set(authInfo)
-  clientInfo[authInfo.length] = p256dh.length >> 8
-  clientInfo[authInfo.length + 1] = p256dh.length & 0xff
-  clientInfo.set(p256dh, authInfo.length + 2)
-  clientInfo[authInfo.length + 2 + p256dh.length] = serverPublicKey.byteLength >> 8
-  clientInfo[authInfo.length + 2 + p256dh.length + 1] = serverPublicKey.byteLength & 0xff
-  clientInfo.set(new Uint8Array(serverPublicKey), authInfo.length + 2 + p256dh.length + 2)
+  const cekInfo = concat(encoder.encode('Content-Encoding: aes128gcm\x00'))
+  const cekFull = await hmacSha256(prk, concat(cekInfo, new Uint8Array([0x01])))
+  const cek = cekFull.slice(0, 16)
 
-  const ikm = await hmacSha256(sharedSecret, salt, encoder.encode('WebPush: info\x00'))
-  const keyInfo = encoder.encode('Content-Encoding: aes128gcm\x00')
-  const prk = await hmacSha256(auth, ikm, null)
-  const keyMaterial = await hmacSha256(prk, salt, keyInfo)
+  const nonceInfo = concat(encoder.encode('Content-Encoding: nonce\x00'))
+  const nonceFull = await hmacSha256(prk, concat(nonceInfo, new Uint8Array([0x01])))
+  const nonce = nonceFull.slice(0, 12)
 
-  const key = await crypto.subtle.importKey(
+  const cekCryptoKey = await crypto.subtle.importKey(
     'raw',
-    keyMaterial,
-    { name: 'AES-GCM', length: 128 },
+    cek,
+    { name: 'AES-GCM' },
     false,
     ['encrypt']
   )
 
-  const nonce = await hmacSha256(
-    await hmacSha256(prk, salt, encoder.encode('Content-Encoding: nonce\x00')),
-    new Uint8Array(0),
-    null
+  const plaintext = concat(new Uint8Array([0x02]), data)
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+      cekCryptoKey,
+      plaintext
+    )
   )
 
-  const iv = nonce.slice(0, 12)
-  const record = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data)
+  const rs = new Uint8Array(4)
+  new DataView(rs.buffer).setUint32(0, 4096)
 
-  const recordBytes = new Uint8Array(record)
-  const tag = recordBytes.slice(-16)
-  const ciphertext = recordBytes.slice(0, -16)
-
-  const keyId = new Uint8Array([0x04, ...new Uint8Array(serverPublicKey)])
-  const rs = new Uint8Array([data.byteLength + 1])
-  const header = new Uint8Array([0x01, rs[0], 0x00, keyId.length])
-  const result = new Uint8Array(header.length + keyId.length + ciphertext.length + tag.length)
-  result.set(header)
-  result.set(keyId, header.length)
-  result.set(ciphertext, header.length + keyId.length)
-  result.set(tag, header.length + keyId.length + ciphertext.length)
-
-  return result
-}
-
-async function hmacSha256(key, data1, data2) {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key instanceof Uint8Array ? key : new Uint8Array(0),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
+  const header = concat(
+    salt,
+    rs,
+    new Uint8Array([0x41]),
+    asPublicKey
   )
 
-  const combined = new Uint8Array(data1.length + (data2 ? data2.length : 0))
-  combined.set(data1)
-  if (data2) combined.set(data2, data1.length)
-
-  const sig = await crypto.subtle.sign('HMAC', cryptoKey, combined)
-  return new Uint8Array(sig)
+  return concat(header, ciphertext)
 }
 
 async function sendPush(subscription, payload) {
@@ -172,6 +180,7 @@ async function sendPush(subscription, payload) {
       'Content-Encoding': 'aes128gcm',
       'Content-Type': 'application/octet-stream',
       Authorization: `vapid t=${jws}, k=${VAPID_PUBLIC_KEY}`,
+      TTL: '86400',
     },
     body: encrypted,
   })
@@ -219,7 +228,7 @@ export default {
         const keys = await env.SUBSCRIPTIONS.list()
         const results = { sent: 0, failed: 0 }
 
-        const payload = {
+        const pushPayload = {
           title: title || 'ГС Заказы',
           body: msgBody || 'Новое уведомление',
           tag: tag || 'gs-order',
@@ -232,7 +241,7 @@ export default {
           const promises = batch.map(async (key) => {
             try {
               const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
-              const status = await sendPush(sub, payload)
+              const status = await sendPush(sub, pushPayload)
               if (status >= 200 && status < 300) {
                 results.sent++
               } else if (status === 404 || status === 410) {
@@ -250,6 +259,46 @@ export default {
         }
 
         return json(results)
+      }
+
+      if (path === '/debug' && request.method === 'GET') {
+        const keys = await env.SUBSCRIPTIONS.list()
+        const subs = []
+        for (const key of keys.keys) {
+          const val = await env.SUBSCRIPTIONS.get(key.name)
+          const parsed = JSON.parse(val)
+          subs.push({ endpoint: parsed.endpoint?.substring(0, 50) + '...', hasKeys: !!parsed.keys })
+        }
+        return json({ count: subs.length, subs })
+      }
+
+      if (path === '/send-debug' && request.method === 'POST') {
+        const body = await request.json()
+        const keys = await env.SUBSCRIPTIONS.list()
+        const results = []
+
+        for (const key of keys.keys) {
+          try {
+            const sub = JSON.parse(await env.SUBSCRIPTIONS.get(key.name))
+            const jws = await generateVapidJws(new URL(sub.endpoint).origin)
+            const encrypted = await encryptPayload({ title: 'Test', body: 'Test' }, sub)
+            const response = await fetch(sub.endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Encoding': 'aes128gcm',
+                'Content-Type': 'application/octet-stream',
+                Authorization: `vapid t=${jws}, k=${VAPID_PUBLIC_KEY}`,
+              },
+              body: encrypted,
+            })
+            const text = await response.text()
+            results.push({ endpoint: sub.endpoint?.substring(0, 60), status: response.status, body: text })
+          } catch (err) {
+            results.push({ error: err.message })
+          }
+        }
+
+        return json({ count: keys.keys.length, results })
       }
 
       if (path === '/vapidPublicKey' && request.method === 'GET') {
