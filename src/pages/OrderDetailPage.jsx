@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import GAS_URL, { STATUSES, STATUS_COLORS } from '../config'
-import RingProgress from '../components/RingProgress'
-import { IconArrowLeft, IconMore, IconPhone, IconMapPin, IconMessage, IconCheck, IconClose } from '../components/Icons'
+import StatusBadge from '../components/StatusBadge'
 
-export default function OrderDetailPage({ orderId, onBack }) {
+export default function OrderDetailPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -15,7 +17,7 @@ export default function OrderDetailPage({ orderId, onBack }) {
         const res = await fetch(`${GAS_URL}?action=orders`)
         const data = await res.json()
         if (!cancelled && data.status === 'ok') {
-          const found = (data.orders || []).find((o) => o.OrderID === orderId)
+          const found = (data.orders || []).find((o) => o.OrderID === id)
           setOrder(found || null)
         }
       } catch {
@@ -26,193 +28,150 @@ export default function OrderDetailPage({ orderId, onBack }) {
     }
     fetchOrder()
     return () => { cancelled = true }
-  }, [orderId])
+  }, [id])
 
   const updateStatus = async (newStatus) => {
     setUpdating(true)
     try {
-      const res = await fetch(`${GAS_URL}?action=updateStatus&orderId=${encodeURIComponent(orderId)}&status=${encodeURIComponent(newStatus)}`)
+      const res = await fetch(`${GAS_URL}?action=updateStatus&orderId=${encodeURIComponent(id)}&status=${encodeURIComponent(newStatus)}`)
       const data = await res.json()
       if (data.status === 'ok') {
         setOrder((prev) => prev ? { ...prev, Status: newStatus } : prev)
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       setUpdating(false)
     }
   }
 
   if (loading) {
     return (
-      <div className="app-screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <div className="shimmer" style={{ width: 200, height: 200, borderRadius: 20 }}/>
+      <div className="flex justify-center py-20">
+        <div className="w-6 h-6 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!order) {
     return (
-      <div className="app-screen" style={{ justifyContent: 'center', alignItems: 'center' }}>
-        <p className="small" style={{ marginBottom: 16 }}>Заказ не найден</p>
-        <button className="btn btn--dark" onClick={onBack}>Назад</button>
+      <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+        <p className="text-muted text-[14px] mb-4">Заказ не найден</p>
+        <button onClick={() => navigate(-1)} className="text-gold text-[13px]">
+          Назад
+        </button>
       </div>
     )
   }
 
   const items = typeof order.Items === 'string' ? JSON.parse(order.Items) : order.Items || []
   const currentIdx = STATUSES.indexOf(order.Status)
-  const progress = Math.round(((currentIdx + 1) / STATUSES.length) * 100)
-  const initials = order.Name ? order.Name.split(' ').map(x => x[0]).slice(0, 2).join('') : '??'
-
-  const statusLabels = {
-    'Новый': 'Принят', 'Принят': 'Подтверждён', 'Готовится': 'Готовится',
-    'В доставке': 'В доставке', 'Доставлен': 'Доставлен',
-  }
-  const nextStatus = currentIdx < STATUSES.length - 1 ? STATUSES[currentIdx + 1] : null
-  const nextLabel = nextStatus ? `Передать · ${nextStatus}` : 'Завершён'
 
   return (
-    <div className="app-screen">
-      <div className="screen-header">
-        <button className="btn btn--icon" onClick={onBack}>
-          <IconArrowLeft width={18} height={18}/>
-        </button>
-        <div style={{ textAlign: 'center' }}>
-          <div className="micro">ЗАКАЗ</div>
-          <div className="title" style={{ fontFamily: 'var(--font-mono)', fontSize: 15 }}>#{order.OrderID}</div>
+    <div className="px-4 pt-4">
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-muted text-[13px] mb-4"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        Назад
+      </button>
+
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="font-mono text-[20px] text-gold font-medium">{order.OrderID}</h1>
+          <p className="text-[12px] text-muted mt-0.5">{order.Timestamp}</p>
         </div>
-        <button className="btn btn--icon"><IconMore width={18} height={18}/></button>
+        <StatusBadge status={order.Status} />
       </div>
 
-      <div className="screen-scroll" style={{ paddingBottom: 160 }}>
-        <div className="card card--gold" style={{ marginBottom: 14, padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div className="eyebrow" style={{ color: 'var(--gold-2)' }}>ТЕКУЩИЙ СТАТУС</div>
-              <div className="h3 serif" style={{ marginTop: 4 }}>{order.Status}</div>
-              <div className="micro" style={{ marginTop: 4 }}>{order.Timestamp || ''}</div>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <RingProgress value={progress} size={64} stroke={5}/>
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'var(--font-serif)', fontSize: 15
-              }} className="gold-text">{progress}%</div>
-            </div>
-          </div>
-        </div>
+      <div className="bg-card border border-border rounded-xl p-4 mb-4">
+        <h3 className="text-[11px] uppercase tracking-wider text-muted mb-3">Клиент</h3>
+        <p className="text-[16px] text-text font-medium mb-1">{order.Name}</p>
+        <a href={`tel:${order.Phone}`} className="text-gold text-[14px] block mb-1">
+          {order.Phone}
+        </a>
+        {order.Address && (
+          <p className="text-[13px] text-muted mt-2">{order.Address}</p>
+        )}
+        {order.Comment && (
+          <p className="text-[13px] text-muted/70 mt-1 italic">«{order.Comment}»</p>
+        )}
+      </div>
 
-        <div className="eyebrow" style={{ margin: '10px 0 8px' }}>КЛИЕНТ</div>
-        <div className="card" style={{ padding: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <div className="avatar" style={{ width: 44, height: 44, fontSize: 15 }}>{initials}</div>
-            <div style={{ flex: 1 }}>
-              <div className="title">{order.Name}</div>
-            </div>
-            <a href={`tel:${order.Phone}`} className="btn btn--icon" style={{ background: 'var(--gold-grad-soft)', borderColor: 'var(--border-strong)', textDecoration: 'none' }}>
-              <IconPhone width={16} height={16}/>
-            </a>
-          </div>
-          <div className="divider"/>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '10px 12px', color: 'var(--text-mute)', fontSize: 13 }}>
-            <IconPhone width={15} height={15} style={{ color: 'var(--gold)' }}/>
-            <a href={`tel:${order.Phone}`} style={{ color: 'var(--text)', textDecoration: 'none' }} className="tab-nums">{order.Phone}</a>
-            {order.Address && (<>
-              <IconMapPin width={15} height={15} style={{ color: 'var(--gold)' }}/>
-              <div style={{ color: 'var(--text)' }}>{order.Address}</div>
-            </>)}
-            {order.Comment && (<>
-              <IconMessage width={15} height={15} style={{ color: 'var(--gold)' }}/>
-              <div className="small" style={{ fontStyle: 'italic', color: 'var(--text)' }}>«{order.Comment}»</div>
-            </>)}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '20px 0 8px' }}>
-          <div className="eyebrow">ЗАКАЗ · {items.length} ПОЗИЦИЙ</div>
-          <div className="micro tab-nums">{(order.TotalPrice || 0).toLocaleString('ru-RU')} ₽</div>
-        </div>
-        <div className="card" style={{ padding: 6 }}>
-          {items.map((it, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '12px 12px',
-              borderBottom: i < items.length - 1 ? '1px solid var(--divider)' : 'none'
-            }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 10,
-                background: 'var(--surface-3)', border: '1px solid var(--border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'var(--font-serif)', color: 'var(--gold)', fontSize: 13
-              }}>×{it.qty}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{it.name}</div>
-                {it.category && <div className="micro" style={{ marginTop: 2 }}>{it.category}{it.weight ? ` · ${it.weight}` : ''}</div>}
+      <div className="bg-card border border-border rounded-xl p-4 mb-4">
+        <h3 className="text-[11px] uppercase tracking-wider text-muted mb-3">Состав</h3>
+        <div className="flex flex-col gap-3">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] text-text truncate">{item.name}</p>
+                <p className="text-[11px] text-muted">
+                  {item.category}{item.weight ? ` · ${item.weight}` : ''}
+                </p>
               </div>
-              <div style={{ fontFamily: 'var(--font-serif)', fontSize: 15, color: 'var(--text)' }}>
-                {it.price ? `${(it.price * it.qty).toLocaleString('ru-RU')} ₽` : ''}
+              <div className="flex items-center gap-3 shrink-0 ml-3">
+                <span className="text-[13px] text-muted">×{item.qty}</span>
+                {item.price && (
+                  <span className="text-[13px] text-text">{item.price * item.qty} ₽</span>
+                )}
               </div>
             </div>
           ))}
         </div>
-
-        <div className="card" style={{ padding: 14, marginTop: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="small">Итого</div>
-            <div className="serif gold-text" style={{ fontSize: 26 }}>{(order.TotalPrice || 0).toLocaleString('ru-RU')} ₽</div>
+        {order.TotalPrice > 0 && (
+          <div className="flex justify-between mt-4 pt-3 border-t border-border">
+            <span className="text-[13px] text-muted uppercase tracking-wider">Итого</span>
+            <span className="text-[18px] text-gold font-medium">{order.TotalPrice} ₽</span>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="eyebrow" style={{ margin: '20px 0 8px' }}>ИСТОРИЯ</div>
-        <div className="card" style={{ padding: 16 }}>
-          <div className="stepline">
-            {STATUSES.map((s, i) => {
-              const isDone = i < currentIdx
-              const isCurrent = i === currentIdx
-              const isPending = i > currentIdx
-              return (
-                <div key={s} className={'step ' + (isDone ? 'step--done' : isCurrent ? 'step--current' : 'step--pending')}>
-                  <div className={'step__dot' + (isCurrent ? ' pulse' : '')}/>
-                  <div style={{ flex: 1 }}>
-                    <div className={'step__title' + (isCurrent ? ' gold-text serif' : '')} style={isCurrent ? { fontSize: 16 } : {}}>
-                      {s}
-                    </div>
-                    <div className="micro">{statusLabels[s] || s}</div>
-                  </div>
-                  <div className="step__time">{isDone || isCurrent ? order.Timestamp?.split(' ')[1] || '—' : '—'}</div>
-                </div>
-              )
-            })}
-          </div>
+      <div className="bg-card border border-border rounded-xl p-4 mb-6">
+        <h3 className="text-[11px] uppercase tracking-wider text-muted mb-3">Статус</h3>
+        <div className="flex flex-col gap-2">
+          {STATUSES.map((s, i) => {
+            const color = STATUS_COLORS[s]
+            const isCurrent = s === order.Status
+            const isPast = i < currentIdx
+            const isNext = i === currentIdx + 1
+            return (
+              <button
+                key={s}
+                disabled={isCurrent || updating}
+                onClick={() => updateStatus(s)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-[13px] font-medium transition-all duration-200 ${
+                  isCurrent
+                    ? 'border-2'
+                    : isNext
+                    ? 'bg-card border border-border active:scale-[0.98]'
+                    : isPast
+                    ? 'bg-card/50 border border-border/50 text-muted/50'
+                    : 'bg-card border border-border'
+                }`}
+                style={isCurrent ? { borderColor: color, color, backgroundColor: color + '10' } : undefined}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: isCurrent ? color : isPast ? color + '40' : '#2A2A2A' }}
+                />
+                {s}
+                {isCurrent && <span className="ml-auto text-[10px] uppercase">Текущий</span>}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {nextStatus && (
-        <div style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0,
-          background: 'linear-gradient(180deg, transparent, rgba(10,10,12,.92) 30%)',
-          padding: '30px 20px 24px',
-          paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
-          zIndex: 30,
-        }}>
-          <div className="card" style={{
-            padding: 12, background: 'var(--surface-2)',
-            display: 'flex', gap: 10, alignItems: 'center'
-          }}>
-            <a href={`tel:${order.Phone}`} className="btn btn--dark btn--sm" style={{ flex: '0 0 auto', textDecoration: 'none' }}>
-              <IconPhone width={14} height={14}/>
-            </a>
-            <button
-              className="btn btn--primary"
-              style={{ flex: 1 }}
-              disabled={updating}
-              onClick={() => updateStatus(nextStatus)}
-            >
-              {updating ? 'Обновляем...' : nextLabel}
-              <IconCheck width={16} height={16}/>
-            </button>
-          </div>
-        </div>
-      )}
+      <a
+        href={`tel:${order.Phone}`}
+        className="fixed bottom-24 left-4 right-4 py-4 rounded-xl bg-gold text-dark text-center text-[14px] font-medium
+                   active:bg-goldSoft transition-colors z-30"
+      >
+        Позвонить клиенту
+      </a>
     </div>
   )
 }

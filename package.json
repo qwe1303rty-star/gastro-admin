@@ -1,7 +1,7 @@
 {
   "name": "gastro-admin",
   "private": true,
-  "version": "2.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,11 +11,15 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.14",
     "vite": "^5.4.10",
     "vite-plugin-pwa": "^0.21.1",
     "web-push": "^3.6.7",

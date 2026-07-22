@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import GAS_URL, { STATUSES } from '../config'
-import OrderCardCompact from '../components/OrderCardCompact'
-import { IconFilter, IconSearch } from '../components/Icons'
+import OrderCard from '../components/OrderCard'
+import NotificationBanner from '../components/NotificationBanner'
+
+const filters = ['Все', ...STATUSES]
 
 function playNotifSound() {
   try {
@@ -25,12 +27,7 @@ function vibrate() {
   try { navigator.vibrate?.([200, 100, 200]) } catch {}
 }
 
-const filterLabels = {
-  'Новый': 'Новые', 'Принят': 'В работе', 'Готовится': 'Готовятся',
-  'В доставке': 'Доставка', 'Доставлен': 'Завершено',
-}
-
-export default function OrdersPage({ onNavigate }) {
+export default function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState('Все')
   const [loading, setLoading] = useState(true)
@@ -47,6 +44,7 @@ export default function OrdersPage({ onNavigate }) {
       const data = await res.json()
       if (data.status === 'ok') {
         const newOrders = data.orders || []
+
         if (!isFirstLoad.current) {
           const newIds = new Set(newOrders.map(o => o.OrderID))
           for (const id of newIds) {
@@ -57,6 +55,7 @@ export default function OrdersPage({ onNavigate }) {
             }
           }
         }
+
         prevOrderIds.current = new Set(newOrders.map(o => o.OrderID))
         isFirstLoad.current = false
         setOrders(newOrders)
@@ -79,67 +78,51 @@ export default function OrdersPage({ onNavigate }) {
     return () => clearInterval(interval)
   }, [fetchOrders])
 
-  const allStatuses = ['Все', ...STATUSES]
-  const totalRevenue = orders.reduce((s, o) => s + (o.TotalPrice || 0), 0)
-
   return (
-    <div className="app-screen">
-      <div className="screen-header">
-        <div>
-          <div className="eyebrow">СМЕНА · 06:00 → 24:00</div>
-          <div className="h3 serif">Заказы</div>
-        </div>
-        <div className="head-actions">
-          <button className="btn btn--icon"><IconFilter width={17} height={17}/></button>
-          <button className="btn btn--icon"><IconSearch width={17} height={17}/></button>
-        </div>
+    <div className="px-4 pt-4">
+      <NotificationBanner />
+
+      <div className="flex gap-2 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-none">
+        {filters.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`shrink-0 px-4 py-2 rounded-full text-[12px] font-medium border transition-all duration-200 ${
+              filter === f
+                ? 'bg-gold text-dark border-gold'
+                : 'bg-card text-muted border-border'
+            }`}
+          >
+            {f}
+          </button>
+        ))}
       </div>
 
-      <div style={{ padding: '0 20px 14px', display: 'flex', gap: 8, overflowX: 'auto' }} className="no-scroll">
-        {allStatuses.map((f) => {
-          const count = f === 'Все' ? orders.length : orders.filter(o => o.Status === f).length
-          return (
-            <button
-              key={f}
-              className={'chip' + (filter === f ? ' chip--active' : '')}
-              onClick={() => setFilter(f)}
-            >
-              {filterLabels[f] || f} · {count}
-            </button>
-          )
-        })}
-      </div>
+      {error && (
+        <p className="text-center text-red-400 text-[13px] py-4">{error}</p>
+      )}
 
-      <div className="screen-scroll">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '4px 0 10px' }}>
-          <div className="eyebrow">СЕГОДНЯ</div>
-          <div className="micro tab-nums">{orders.length} заказов · {totalRevenue.toLocaleString('ru-RU')} ₽</div>
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="w-6 h-6 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
         </div>
-
-        {error && (
-          <p style={{ color: 'var(--error)', fontSize: 13, textAlign: 'center', padding: 16 }}>{error}</p>
-        )}
-
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1,2,3].map(i => <div key={i} className="shimmer" style={{ height: 90, borderRadius: 16 }}/>)}
+      ) : orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-full border border-border flex items-center justify-center mb-4">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted/40">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
           </div>
-        ) : orders.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 60 }}>
-            <p className="small">Заказов пока нет</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {orders.map(order => (
-              <OrderCardCompact
-                key={order.OrderID}
-                order={order}
-                onClick={() => onNavigate?.('order', order.OrderID)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          <p className="text-muted text-[14px]">Заказов пока нет</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {orders.map((order) => (
+            <OrderCard key={order.OrderID} order={order} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
