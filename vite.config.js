@@ -1,12 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
@@ -20,8 +18,8 @@ export default defineConfig({
         name: 'ГС Заказы',
         short_name: 'ГС Заказы',
         description: 'Панель управления заказами',
-        theme_color: '#6d4ff6',
-        background_color: '#07070d',
+        theme_color: '#0D0D0D',
+        background_color: '#0D0D0D',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/gastro-admin/',
@@ -33,6 +31,7 @@ export default defineConfig({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
+
     })
   ],
   base: '/gastro-admin/',
